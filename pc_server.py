@@ -4,6 +4,7 @@ import os
 import time
 import hashlib
 import struct
+import sys
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -11,7 +12,7 @@ def clear_screen():
 def print_banner():
     clear_screen()
     print("=" * 60)
-    print("PC聊天服务器 (支持文件传输) - 修复版")
+    print("PC聊天服务器 (支持文本/文件传输)")
     print("=" * 60)
 
 def get_file_checksum(file_path):
@@ -32,6 +33,18 @@ def recv_all(sock, length):
         data += packet
     return data
 
+def get_multiline_input(prompt):
+    """获取多行输入，以//end结束"""
+    print(prompt)
+    print("输入多行文本 (输入'//end'结束):")
+    lines = []
+    while True:
+        line = input()
+        if line.strip() == '//end':
+            break
+        lines.append(line)
+    return '\n'.join(lines)
+
 def handle_client(client_socket, client_address):
     def receive_thread():
         while True:
@@ -50,7 +63,10 @@ def handle_client(client_socket, client_address):
                     
                     # 接收文本内容
                     message = recv_all(client_socket, text_len).decode('utf-8')
-                    print(f"\n手机 > {message}\nPC > ", end="", flush=True)
+                    print("\n" + "-" * 40)
+                    print(f"手机 >\n{message}")
+                    print("-" * 40)
+                    print("PC > ", end="", flush=True)
                     
                 elif msg_type == b'F':  # 文件传输
                     # 读取文件名长度 (1字节)
@@ -71,8 +87,10 @@ def handle_client(client_socket, client_address):
                     # 读取MD5校验和 (32字节)
                     file_md5 = recv_all(client_socket, 32).decode('utf-8')
                     
-                    print(f"\n接收文件中: {file_name} ({file_size/1024:.1f}KB)")
+                    print("\n" + "=" * 40)
+                    print(f"接收文件中: {file_name} ({file_size/1024:.1f}KB)")
                     print(f"MD5校验: {file_md5}")
+                    print("=" * 40)
                     
                     # 创建接收目录
                     if not os.path.exists("received_files"):
@@ -181,22 +199,28 @@ def start_server(host='0.0.0.0', port=12345):
     
     try:
         while True:
-            msg = input("PC > ")
-            if not msg:
+            print("PC > ", end="", flush=True)
+            command = sys.stdin.readline().strip()
+            
+            if not command:
                 continue
                 
-            if msg.lower() == 'exit':
+            if command.lower() == 'exit':
                 break
                 
-            if msg.startswith('/sendfile '):
+            if command.startswith('/sendfile '):
                 # 文件发送命令
-                file_path = msg.split(' ', 1)[1]
+                file_path = command.split(' ', 1)[1]
                 send_file(client_socket, file_path)
-                print("PC > ", end="", flush=True)
                 
+            elif command == '/text':
+                # 多行文本输入
+                text = get_multiline_input("请输入文本内容:")
+                if text:
+                    send_text(client_socket, text)
             else:
-                # 文本消息
-                send_text(client_socket, msg)
+                # 单行文本消息
+                send_text(client_socket, command)
                 
     except KeyboardInterrupt:
         pass
